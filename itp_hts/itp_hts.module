@@ -1,0 +1,493 @@
+<?php
+/**
+ * Widget Hierarchical Select for Taxonomy
+ *
+ * Developer: Kirill Danilevsky, k.danilevsky@gmail.com
+ * web: http://itprostor.com
+ */
+
+
+/**
+ * Implements of hook_field_formatter_info().
+ */
+function itp_hts_field_formatter_info() {
+  $format = array(
+    'itp_hts_plan_text_formatter' => array(
+      'label' => t('ITP hierarchical plan text'),
+      'field types' => array('taxonomy_term_reference'),
+      'settings' => array(
+        'delimiter' => '›',
+      ),
+    ),
+    'itp_hts_link_formatter' => array(
+      'label' => t('ITP hierarchical link'),
+      'field types' => array('taxonomy_term_reference'),
+      'settings' => array(
+        'delimiter' => '›',
+      ),
+    )
+  );
+  return $format;
+}
+
+/**
+ * Implements hook_field_formatter_settings_form().
+ */
+function itp_hts_field_formatter_settings_form($field, $instance, $view_mode, $form, &$form_state) {
+  // This gets the view_mode where our settings are stored.
+  $display = $instance['display'][$view_mode];
+  // This gets the actual settings.
+  $settings = $display['settings'];
+  // Initialize the element variable.
+  $element = array();
+  $element['delimiter'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Delimiter symbol'),
+    '#description' => t('This delimiter symbol that will separate taxonomy terms.'),
+    '#default_value' => $settings['delimiter'],
+  );
+  return $element;
+}
+
+/**
+ * Implements hook_field_formatter_settings_summary().
+ */
+function itp_hts_field_formatter_settings_summary($field, $instance, $view_mode) {
+  $display = $instance['display'][$view_mode];
+  $settings = $display['settings'];
+  $summary = t('Use a delimiter symbol for separate taxonomy terms.');
+  return $summary;
+}
+
+/**
+ * Implements of hook_field_formatter_view().
+ */
+function itp_hts_field_formatter_view($entity_type, $entity, $field, $instance, $lang, $items, $display) {
+
+  $element = array();
+
+  switch ($display['type']) {
+    // Get need formatter.
+    case 'itp_hts_plan_text_formatter':
+      if (isset($display['settings']['delimiter'])) {
+        $delimiter = $display['settings']['delimiter'];
+      }
+      else {
+        $delimiter = '';
+      }
+
+      $count_items = count($items);
+      $terms = '';
+
+      // Build string with taxonomy terms.
+      for ($i = 0; $i < $count_items; $i++) {
+        $terms .= taxonomy_term_load($items[$i]['tid'])->name;
+        if ($i < $count_items - 1) {
+          $terms .= ' ' . $delimiter . ' ';
+        }
+      }
+
+      $element[]['#markup'] = $terms;
+      break;
+    case 'itp_hts_link_formatter':
+      if (isset($display['settings']['delimiter'])) {
+        $delimiter = $display['settings']['delimiter'];
+      }
+      else {
+        $delimiter = '';
+      }
+
+      $count_items = count($items);
+      $terms = '';
+
+      // Build string with taxonomy terms.
+      for ($i = 0; $i < $count_items; $i++) {
+        $terms .= l(taxonomy_term_load($items[$i]['tid'])->name, 'taxonomy/term/' . $items[$i]['tid']);
+        if ($i < $count_items - 1) {
+          $terms .= ' ' . $delimiter . ' ';
+        }
+      }
+
+      $element[]['#markup'] = $terms;
+      break;
+  }
+
+  return $element;
+}
+
+/**
+ * Implements of hook_field_widget_info().
+ */
+function itp_hts_field_widget_info() {
+  return array(
+    'itp_hts' => array(
+      'label' => t('ITP hierarchical taxonomy select'),
+      'field types' => array('taxonomy_term_reference'),
+      'settings' => array(
+        'select_0' => '',
+        'select_1' => '',
+        'select_2' => '',
+        'select_3' => '',
+      ),
+      'behaviors' => array(
+        'multiple values' => FIELD_BEHAVIOR_CUSTOM,
+        'default value' => FIELD_BEHAVIOR_DEFAULT,
+      ),
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_widget_settings_form().
+ */
+function itp_hts_field_widget_settings_form($field, $instance) {
+  $widget = $instance['widget'];
+  $settings = $widget['settings'];
+
+  $form['select_0'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Name select field 1'),
+    '#default_value' => $settings['select_0'],
+  );
+
+  $form['select_1'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Name select field 2'),
+    '#default_value' => $settings['select_1'],
+  );
+
+  $form['select_2'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Name select field 3'),
+    '#default_value' => $settings['select_2'],
+  );
+
+  $form['select_3'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Name select field 4'),
+    '#default_value' => $settings['select_3'],
+  );
+
+  return $form;
+}
+
+/**
+ * Implements hook_field_widget_form().
+ */
+function itp_hts_field_widget_form(&$form, &$form_state, $field, $instance, $langcode, $items, $delta, $element) {
+
+  // Get need widget type.
+  switch ($instance['widget']['type']) {
+    case 'itp_hts' :
+
+      // Get field name.
+      $field_name = $field['field_name'];
+      // Get voc. taxonomy name.
+      $voc_name = $field['settings']['allowed_values'][0]['vocabulary'];
+
+      if (!empty($voc_name)) {
+        $vid = itp_hts_get_taxonomy_vid($voc_name);
+      }
+
+      // Get all parents terms.
+      $parents = itp_hts_get_taxonomy_tree($vid);
+
+      // Get all tid that selected user from form_state.
+      if (isset($form_state['values'][$field_name][$langcode]) && !isset($form_state['input'][$field_name][$langcode])) {
+        $term = $form_state['values'][$field_name][$langcode];
+
+        // If terms keeping in format array('key' => value) change to array(array('tid'=>value)).
+        $term = itp_hts_taxonomy_element_select_check($term, 'Value-yes, Input-no');
+      }
+      else {
+        // If this is first load edit form.
+        if (!empty($items) && !isset($term)) {
+          $term = $items;
+          $form_state['values'][$field_name][$langcode] = $term;
+          $default_item = $term;
+        }
+        else {
+          $term = '';
+        }
+      } // If exist $form_state['input'] get data from it.
+      if (isset($form_state['input'][$field_name][$langcode])) {
+        $term = $form_state['input'][$field_name][$langcode];
+        ksort($term);
+        $term = itp_hts_taxonomy_element_select_check($term, 'Input yes');
+      }
+
+      // Create fieldset.
+      $element += array(
+        '#type' => 'fieldset',
+        '#title' => $element['#title'],
+        '#delta' => $delta,
+        '#name' => 'itp-select-widget',
+        '#required' => $element['#required'],
+        '#description' => $element['#description'],
+        '#weight' => isset($element['#weight']) ? $element['#weight'] : 0,
+        '#prefix' => '<div id="itp-hts-fieldset">',
+        '#suffix' => '</div>',
+        '#default_value' => isset($term) ? $term : '',
+        '#tree' => TRUE,
+        '#element_validate' => array('itp_hts_taxonomy_widget_validate'),
+      );
+
+      // Create first select with parents (root) terms.
+      $element[0] = array(
+        '#type' => 'select',
+        '#title' => t('@title', array('@title' => $instance['widget']['settings']['select_0'])),
+        '#default_value' => isset($default_item[0]['tid']) ? $default_item[0]['tid'] : '',
+        '#options' => array('none' => '--Select value--') +
+          $parents,
+        '#required' => $element['#required'],
+        '#validated' => TRUE,
+        '#ajax' => array(
+          'callback' => 'itp_hts_taxonomy_ajax_callback',
+          'wrapper' => 'itp-hts-fieldset',
+        ),
+        '#prefix' => '<div id="itp-hts-select" style="float: left; margin-right: 10px;">',
+        '#suffix' => '</div>',
+        '#attributes' => array('class' => array('hts-select'))
+      );
+
+      // If change in the select.
+      if (!empty($term)) {
+
+        // Search count select field.
+        $count = count($term);
+        for ($i = 0; $i < $count; $i++) {
+          $tid = $term[$i]['tid'];
+
+          // Get children items.
+          $children = itp_hts_get_taxonomy_tree($vid, $tid);
+
+          if ($children) {
+
+            // Create title for select field.
+            switch ($i) {
+              case 0:
+                $title = t('@title', array('@title' => $instance['widget']['settings']['select_1']));
+                break;
+              case 1:
+                $title = t('@title', array('@title' => $instance['widget']['settings']['select_2']));
+                break;
+              case 2:
+                $title = t('@title', array('@title' => $instance['widget']['settings']['select_3']));
+                break;
+            }
+
+            // Create child select terms.
+            $element[$i + 1] = array(
+              '#type' => 'select',
+              '#title' => $title,
+              '#default_value' => isset($default_item[$i + 1]['tid']) ? $default_item[$i + 1]['tid'] : '',
+              '#options' => array('none' => '--Select ' . $title . '--') +
+                $children,
+              '#required' => $element['#required'],
+              '#validated' => TRUE,
+              '#ajax' => array(
+                'callback' => 'itp_hts_taxonomy_ajax_callback',
+                'wrapper' => 'itp-hts-fieldset',
+              ),
+              '#prefix' => '<div id="itp-hts-select" style="float: left; margin-right: 10px;">',
+              '#suffix' => '</div>',
+              '#attributes' => array('class' => array('hts-select'))
+            );
+          }
+        }
+      }
+
+      break;
+  }
+
+  return $element;
+}
+
+/**
+ * AJAX callback for itp_hts_field_widget_form.
+ */
+function itp_hts_taxonomy_ajax_callback($form, &$form_state) {
+
+  $parents = $form_state['triggering_element']['#array_parents'];
+  array_pop($parents);
+  // Return old form elements.
+  $element = drupal_array_get_nested_value($form, $parents);
+  // Get changed select element.
+  $name_field = explode('][', $form_state['triggering_element']['#name']);
+  $name_field_count = count($name_field);
+  $field_action = $name_field[$name_field_count - 1];
+  $field_action = str_replace(']', '', $field_action);
+  // If user change above on 2 item select then delete all bellow select items.
+  for ($i = $field_action + 2; $i < 10; $i++) {
+    unset($element[$i]);
+  }
+
+  return $element;
+}
+
+/**
+ * Get all root terms or children terms.
+ *
+ * @param $vid integer vocabulary id
+ * @param null $tid integer term id
+ *
+ * @return array list with terms, key - tid, value - name term
+ */
+function itp_hts_get_taxonomy_tree($vid, $tid = NULL) {
+
+  // Get all root terms.
+  if (!$tid) {
+
+    // Get all parents terms.
+    $data = db_select('taxonomy_term_hierarchy', 'h')
+      ->fields('h', array('tid'));
+    $data->innerJoin('taxonomy_term_data', 't', 't.tid=h.tid');
+    $data->condition('h.parent', 0)
+      ->condition('t.vid', $vid)
+      ->fields('t', array('name'))
+      ->orderBy('t.weight', 'ASC')
+      ->orderBy('t.name', 'ASC');
+    $parents = $data->execute()->fetchAllKeyed();
+    $list = $parents;
+  }
+  else {
+
+    // Get all child terms.
+    $data = db_select('taxonomy_term_hierarchy', 'h')
+      ->fields('h', array('tid'));
+    $data->innerJoin('taxonomy_term_data', 't', 't.tid=h.tid');
+    $data->condition('h.parent', $tid)
+      ->condition('t.vid', $vid)
+      ->fields('t', array('name'))
+      ->orderBy('t.name', 'ASC');
+    $parents = $data->execute()->fetchAllKeyed();
+    $list = $parents;
+  }
+
+  return $list;
+}
+
+/**
+ * Get taxonomy vid from machine name.
+ *
+ * @param $voc_name string machine vocabulary name
+ */
+function itp_hts_get_taxonomy_vid($voc_name) {
+
+  // Search taxonomy vid.
+  $vid = db_select('taxonomy_vocabulary', 't')
+    ->fields('t', array('vid'))
+    ->condition('t.machine_name', $voc_name)
+    ->execute()->fetchField();
+
+  return $vid;
+}
+
+/**
+ * Check taxonomy child.
+ *
+ * @param $tid integer term id
+ *
+ * @return bool TRUE if exist
+ */
+function itp_hts_check_taxonomy_child($tid) {
+
+  // Get child term.
+  $child = db_select('taxonomy_term_hierarchy', 'h')
+    ->fields('h', array('tid'))
+    ->condition('h.parent', $tid)
+    ->range(0, 1)
+    ->execute()->fetchField();
+
+  if (!empty($child)) {
+    return TRUE;
+  }
+  else {
+    return FALSE;
+  }
+}
+
+/**
+ * Validate widget element.
+ *
+ * @param $form
+ * @param $form_state
+ */
+function itp_hts_taxonomy_widget_validate($form, &$form_state) {
+
+  $field_name = $form['#field_name'];
+  $lang = $form['#language'];
+
+  $term = $form_state['values'][$field_name][$lang];
+  $term = itp_hts_taxonomy_element_select_check($term, 'Validate:');
+
+  // Rebuild form_state.
+  if (!empty($term)) {
+    $form_state['values'][$field_name][$lang] = array();
+    $form_state['values'][$field_name][$lang] = $term;
+  }
+  else {
+    // Id add or edit node.
+    if (isset($form_state['complete form']['#node'])) {
+      form_set_error($field_name, t('You must select value in field @title!', array('@title' => $form['#title'])));
+    }
+  }
+}
+
+/**
+ * Check empty field or non select field.
+ *
+ * @param $term array with terms.
+ * @param $status string information for debug and test.
+ *
+ * @return array with right data
+ */
+function itp_hts_taxonomy_element_select_check($term, $status = NULL) {
+  if (!empty($term)) {
+    // If terms keeping in format array('key' => value) change to array(array('tid'=>value)).
+    if (!is_array($term[0])) {
+      $tids = array();
+      foreach ($term as $key => $value) {
+        // Check on a empty field or non select field.
+        if (!empty($value) && $value != 'none') {
+          $tids[$key] = array('tid' => $value);
+        }
+        else {
+          break;
+        }
+      }
+    }
+    else {
+      $tids = array();
+      foreach ($term as $key => $value) {
+        // Check on a empty field or non select field.
+        if (!empty($value['tid']) && $value['tid'] != 'none') {
+          $tids[$key] = array('tid' => $value['tid']);
+        }
+        else {
+          break;
+        }
+      }
+    }
+    if (count($tids) == 0) {
+      return '';
+    }
+    else {
+      return $tids;
+    }
+  }
+  else {
+    return '';
+  }
+}
+
+/**
+ * Implements hook_field_widget_form().
+ */
+function itp_hts_field_widget_error($element, $error, $form, &$form_state) {
+  switch ($error['error']) {
+    case 'itp_hts_invalid':
+      form_error($element, $error['message']);
+      break;
+  }
+}

@@ -1,4 +1,3 @@
-# itp_hts
 ITP Hierarchical Taxonomy Select
 
 Developer: Kirill Danilevsky, k.danilevsky@gmail.com

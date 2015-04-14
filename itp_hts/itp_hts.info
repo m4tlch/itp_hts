@@ -1,0 +1,5 @@
+name = ITP Hierarchical Taxonomy Select
+description = Widget hierarchical select for taxonomy (Danilevsky Kirill, k.danilevsky@gmail.com, web: http://itprostor.com)
+core = 7.x
+version = 1.0
+package = ITP HTS
